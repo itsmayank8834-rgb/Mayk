@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+  <title>Universal AI Chat</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            geminiLight: '#ffffff',
+            geminiLightSidebar: '#f0f4f9',
+            geminiLightSurface: '#f8fafd',
+            geminiDark: '#131314',
+            geminiDarkSidebar: '#1e1f20',
+            geminiDarkSurface: '#282a2c',
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Marked.js CDN for Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Highlight.js for Code Blocks -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.7);
+    }
+
+    /* Markdown Prose Styling */
+    .markdown-body p {
+      margin-bottom: 0.75rem;
+      line-height: 1.65;
+    }
+    .markdown-body p:last-child {
+      margin-bottom: 0;
+    }
+    .markdown-body ul, .markdown-body ol {
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .markdown-body ul {
+      list-style-type: disc;
+    }
+    .markdown-body ol {
+      list-style-type: decimal;
+    }
+    .markdown-body li {
+      margin-bottom: 0.25rem;
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .markdown-body h1 { font-size: 1.35rem; }
+    .markdown-body h2 { font-size: 1.2rem; }
+    .markdown-body h3 { font-size: 1.05rem; }
+    .markdown-body pre {
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      padding: 0.85rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+    }
+    .markdown-body code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875em;
+    }
+    .markdown-body :not(pre) > code {
+      background-color: rgba(135, 131, 120, 0.18);
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.35rem;
+    }
+    .markdown-body blockquote {
+      border-left: 3px solid #3b82f6;
+      padding-left: 0.75rem;
+      color: #6b7280;
+      margin: 0.5rem 0;
+    }
+    .dark .markdown-body blockquote {
+      color: #9ca3af;
+    }
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+    }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid rgba(156, 163, 175, 0.3);
+      padding: 0.4rem 0.6rem;
+      text-align: left;
+    }
+
+    /* Blinking Cursor during Streaming */
+    .typing-cursor::after {
+      content: '▋';
+      display: inline-block;
+      margin-left: 2px;
+      animation: blink 1s step-start infinite;
+      color: #3b82f6;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+  </style>
+</head>
+<body class="bg-geminiLight dark:bg-geminiDark text-gray-800 dark:text-gray-100 antialiased selection:bg-blue-500 selection:text-white">
+
+  <!-- Fallback Loader -->
+  <div id="loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white dark:bg-[#131314] text-gray-800 dark:text-gray-100">
+    <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+    <p class="text-sm font-medium tracking-wide">Loading App...</p>
+  </div>
+
+  <!-- Main App Wrapper (Uses min-h-screen & flex, NO h-screen + overflow-hidden) -->
+  <div id="app" class="hidden min-h-screen flex flex-col md:flex-row relative">
+
+    <!-- Mobile Backdrop -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden transition-opacity"></div>
+
+    <!-- Left Sidebar -->
+    <aside id="sidebar" class="fixed md:sticky top-0 left-0 z-40 w-72 min-h-screen max-h-screen flex flex-col bg-geminiLightSidebar dark:bg-geminiDarkSidebar border-r border-gray-200/70 dark:border-gray-800 transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out shrink-0">
+      
+      <!-- Sidebar Top: New Chat -->
+      <div class="p-3 flex items-center justify-between gap-2">
+        <button id="new-chat-btn" class="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white dark:bg-geminiDarkSurface hover:bg-gray-100 dark:hover:bg-gray-700/70 text-sm font-medium shadow-sm border border-gray-200/80 dark:border-gray-700/60 transition">
+          <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>New chat</span>
+        </button>
+
+        <button id="close-sidebar-btn" class="md:hidden p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Close Sidebar">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Recent Chats Label -->
+      <div class="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+        Recent
+      </div>
+
+      <!-- Chat History List -->
+      <div id="chat-list" class="flex-1 overflow-y-auto px-2 space-y-1">
+        <!-- Populated dynamically -->
+      </div>
+
+      <!-- Sidebar Footer: Controls -->
+      <div class="p-3 border-t border-gray-200/80 dark:border-gray-800 space-y-1">
+        <button id="open-system-prompt-btn" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-gray-200/70 dark:hover:bg-gray-800 transition text-left">
+          <svg class="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          <span class="truncate">System Prompt</span>
+        </button>
+
+        <button id="theme-toggle-btn" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-gray-200/70 dark:hover:bg-gray-800 transition text-left">
+          <svg id="theme-icon-sun" class="w-4 h-4 text-amber-500 hidden shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          <svg id="theme-icon-moon" class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+          <span id="theme-label">Dark Mode</span>
+        </button>
+
+        <button id="open-settings-btn" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-gray-200/70 dark:hover:bg-gray-800 transition text-left">
+          <svg class="w-4 h-4 text-gray-600 dark:text-gray-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>Settings & API Key</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-h-screen w-full">
+
+      <!-- Sticky Top Header -->
+      <header class="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-geminiLight/90 dark:bg-geminiDark/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800/80">
+        <div class="flex items-center gap-3">
+          <button id="open-sidebar-btn" class="md:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Open Menu">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div class="flex items-center gap-2">
+            <span class="text-lg font-semibold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 bg-clip-text text-transparent">
+              Gemini
+            </span>
+            <span id="active-model-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-geminiDarkSurface text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 truncate max-w-[150px] sm:max-w-[240px]">
+              deepseek/deepseek-r1:free
+            </span>
+          </div>
+        </div>
+
+        <button id="header-settings-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300" title="API Settings">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+        </button>
+      </header>
+
+      <!-- Chat Messages Container -->
+      <div id="messages-container" class="flex-1 w-full max-w-3xl mx-auto px-4 pt-6 pb-8 space-y-6">
+        <!-- Empty State / Welcome -->
+        <div id="welcome-screen" class="py-12 md:py-20 text-center space-y-4">
+          <h1 class="text-3xl sm:text-4xl font-semibold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+            Hello there
+          </h1>
+          <p class="text-gray-500 dark:text-gray-400 text-base sm:text-lg max-w-md mx-auto">
+            How can I help you today? Configure your OpenRouter API key in settings to start chatting.
+          </p>
+          <div id="api-warning-banner" class="hidden max-w-md mx-auto p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-sm">
+            No API key set. <button id="banner-open-settings" class="underline font-semibold">Add OpenRouter Key</button>
+          </div>
+        </div>
+
+        <!-- Dynamic Messages Feed -->
+        <div id="messages-feed" class="space-y-6"></div>
+      </div>
+
+      <!-- Sticky Bottom Input Area (Keyboard Safe on Mobile) -->
+      <div class="sticky bottom-0 z-20 w-full bg-gradient-to-t from-geminiLight via-geminiLight to-transparent dark:from-geminiDark dark:via-geminiDark pt-2 pb-3 px-3 sm:px-4">
+        <div class="max-w-3xl mx-auto">
+          <form id="chat-form" class="relative flex items-end gap-2 bg-geminiLightSidebar dark:bg-geminiDarkSidebar border border-gray-200 dark:border-gray-700/80 rounded-3xl px-4 py-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/40 transition">
+            <textarea
+              id="user-input"
+              rows="1"
+              placeholder="Enter a prompt here..."
+              class="flex-1 max-h-36 bg-transparent border-0 focus:ring-0 focus:outline-none resize-none text-sm
